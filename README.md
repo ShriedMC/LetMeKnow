@@ -21,6 +21,7 @@ Usage:
 
 ## Installation
 
+**YOUR AGENT NEEDS TO HAVE FULL ACSESS FOR THE TOOL TO WORK**
 1. Download the latest release, or build it your self with the source code.
 2. Run **lmk.exe** and follow the steps provided.
    *(If this dosen't work please run install.bat as a secondary measure)*
