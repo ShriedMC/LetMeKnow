@@ -147,9 +147,9 @@ namespace LetMeKnow
             // Internal background process: --render <who> <what> <details> <isUrgent>
             if (first == "--render" && args.Length >= 3)
             {
-                string rWho = args[1];
-                string rWhat = args[2];
-                string rDetails = args.Length >= 4 ? args[3] : "";
+                string rWho = DecodeArg(args[1]);
+                string rWhat = DecodeArg(args[2]);
+                string rDetails = args.Length >= 4 ? DecodeArg(args[3]) : "";
                 bool rUrgent = args.Length >= 5 && args[4].Equals("true", StringComparison.OrdinalIgnoreCase);
                 RenderNotificationWindow(rWho, rWhat, rDetails, rUrgent);
                 return;
@@ -215,55 +215,22 @@ namespace LetMeKnow
 
         public static void ShowNotification(string who, string what, string details, bool isUrgent)
         {
-            string exePath = Assembly.GetExecutingAssembly().Location;
-            ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = exePath;
-            psi.Arguments = string.Format("--render \"{0}\" \"{1}\" \"{2}\" {3}",
-                EscapeArg(who), EscapeArg(what), EscapeArg(details), isUrgent ? "true" : "false");
-            psi.CreateNoWindow = true;
-            psi.UseShellExecute = false;
-            psi.WindowStyle = ProcessWindowStyle.Hidden;
-
-            try
-            {
-                Process.Start(psi);
-                Console.WriteLine("[lmk] sent: [{0}] {1}", who, what);
-            }
-            catch (Exception)
-            {
-                RenderNotificationWindow(who, what, details, isUrgent);
-            }
-        }
-
-        static string EscapeArg(string arg)
-        {
-            if (string.IsNullOrEmpty(arg)) return "";
-            return arg.Replace("\"", "\\\"");
-        }
-
-        static void RenderNotificationWindow(string who, string what, string details, bool isUrgent)
-        {
             Config cfg = Config.Load();
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
+            // 1. Play audio chime synchronously so user hears it immediately before CLI exits
             if (cfg.SoundEnabled)
             {
                 try
                 {
                     if (isUrgent && cfg.LouderAlertEnabled)
                     {
-                        ThreadPool.QueueUserWorkItem(delegate
+                        System.Media.SystemSounds.Exclamation.Play();
+                        try
                         {
-                            try
-                            {
-                                System.Media.SystemSounds.Exclamation.Play();
-                                Console.Beep(880, 120);
-                                Console.Beep(1175, 240);
-                            }
-                            catch { }
-                        });
+                            Console.Beep(880, 100);
+                            Console.Beep(1175, 180);
+                        }
+                        catch { }
                     }
                     else
                     {
@@ -273,17 +240,87 @@ namespace LetMeKnow
                 catch { }
             }
 
+            // 2. Windows Action Center notification (logs to Action Center Win + N)
             if (cfg.WindowsActionCenter)
+            {
+                SendWindowsToast(who, what, details);
+            }
+
+            // 3. Floating HUD desktop card
+            // Launched via Shell.Application COM (explorer.exe) so it is detached from the AI agent's process tree.
+            // When an agent tool runner completes, it often terminates child processes in its job object.
+            // Spawning via the Windows desktop shell ensures the card stays on screen for its full duration.
+            string exePath = Assembly.GetExecutingAssembly().Location;
+            string renderArgs = string.Format("--render {0} {1} {2} {3}",
+                EncodeArg(who), EncodeArg(what), EncodeArg(details), isUrgent ? "true" : "false");
+
+            bool launched = false;
+            try
+            {
+                Type shellType = Type.GetTypeFromProgID("Shell.Application");
+                if (shellType != null)
+                {
+                    dynamic shell = Activator.CreateInstance(shellType);
+                    shell.ShellExecute(exePath, renderArgs, "", "open", 1);
+                    launched = true;
+                }
+            }
+            catch { }
+
+            if (!launched)
             {
                 try
                 {
-                    ThreadPool.QueueUserWorkItem(delegate
-                    {
-                        SendWindowsToast(who, what, details);
-                    });
+                    ProcessStartInfo psi = new ProcessStartInfo();
+                    psi.FileName = exePath;
+                    psi.Arguments = renderArgs;
+                    psi.UseShellExecute = true;
+                    psi.WindowStyle = ProcessWindowStyle.Normal;
+                    Process.Start(psi);
+                    launched = true;
                 }
                 catch { }
             }
+
+            if (!launched)
+            {
+                try
+                {
+                    RenderNotificationWindow(who, what, details, isUrgent);
+                }
+                catch { }
+            }
+
+            Console.WriteLine("[lmk] sent: [{0}] {1}", who, what);
+        }
+
+        static string EncodeArg(string val)
+        {
+            if (string.IsNullOrEmpty(val)) return "\"\"";
+            byte[] bytes = Encoding.UTF8.GetBytes(val);
+            return Convert.ToBase64String(bytes);
+        }
+
+        static string DecodeArg(string val)
+        {
+            if (string.IsNullOrEmpty(val) || val == "\"\"") return "";
+            try
+            {
+                byte[] bytes = Convert.FromBase64String(val);
+                return Encoding.UTF8.GetString(bytes);
+            }
+            catch
+            {
+                return val;
+            }
+        }
+
+        static void RenderNotificationWindow(string who, string what, string details, bool isUrgent)
+        {
+            Config cfg = Config.Load();
+
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
 
             using (ToastForm form = new ToastForm(who, what, details, cfg, isUrgent))
             {
@@ -295,8 +332,11 @@ namespace LetMeKnow
         {
             try
             {
-                string body = string.IsNullOrEmpty(details) ? what : what + "`n" + details;
-                string psCode = string.Format(@"
+                string body = string.IsNullOrEmpty(details) ? what : what + "\n" + details;
+                string safeWho = XmlEscape(who);
+                string safeBody = XmlEscape(body);
+
+                string psScript = string.Format(@"
 try {{
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
     [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
@@ -323,21 +363,35 @@ try {{
         [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
     }}
 }} catch {{}}
-", who.Replace("\"", "`\""), body.Replace("\"", "`\""));
+", safeWho, safeBody);
+
+                byte[] bytes = Encoding.Unicode.GetBytes(psScript);
+                string base64 = Convert.ToBase64String(bytes);
 
                 ProcessStartInfo psi = new ProcessStartInfo();
                 psi.FileName = "powershell.exe";
-                psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"" + psCode.Replace("\"", "\\\"") + "\"";
+                psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + base64;
                 psi.CreateNoWindow = true;
                 psi.UseShellExecute = false;
                 psi.WindowStyle = ProcessWindowStyle.Hidden;
                 using (Process p = Process.Start(psi))
                 {
-                    p.WaitForExit(3000);
+                    if (p != null) p.WaitForExit(2000);
                 }
             }
             catch { }
         }
+
+        static string XmlEscape(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            return text.Replace("&", "&amp;")
+                       .Replace("<", "&lt;")
+                       .Replace(">", "&gt;")
+                       .Replace("\"", "&quot;")
+                       .Replace("'", "&apos;");
+        }
+
 
         static void PrintHelp()
         {
@@ -516,6 +570,7 @@ try {{
 
             Rectangle screen = Screen.PrimaryScreen.WorkingArea;
             this.Location = new Point(screen.Right - cardWidth - 20, screen.Bottom - cardHeight - 20);
+            this.Shown += delegate { this.BringToFront(); };
 
             // Subtle border
             Panel border = new Panel();
@@ -645,6 +700,7 @@ try {{
                 }
 
                 cfg.Save();
+                RegisterAppUserModelId(targetLetMeKnowExe);
                 AddToUserPath(targetDir);
                 CreateStartMenuShortcut(targetLetMeKnowExe);
                 InstallPowerShellModule(targetExe);
@@ -681,6 +737,7 @@ try {{
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 string targetDir = Path.Combine(localAppData, "LetMeKnow");
 
+                RemoveAppUserModelId();
                 RemoveFromUserPath(targetDir);
                 RemoveStartMenuShortcut();
                 RemovePowerShellProfile();
@@ -708,18 +765,47 @@ del ""%~f0""
             }
         }
 
+        private static void RegisterAppUserModelId(string exePath)
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Classes\AppUserModelId\LetMeKnow"))
+                {
+                    if (key != null)
+                    {
+                        key.SetValue("DisplayName", "LetMeKnow", Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("ShowInSettings", 1, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("IconUri", exePath, Microsoft.Win32.RegistryValueKind.String);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void RemoveAppUserModelId()
+        {
+            try
+            {
+                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\AppUserModelId\LetMeKnow", false);
+            }
+            catch { }
+        }
+
         private static void AddToUserPath(string dir)
         {
             string currentPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
             string[] parts = currentPath.Split(';');
+            List<string> cleanParts = new List<string>();
             foreach (string p in parts)
             {
-                if (string.Equals(p.Trim(), dir.Trim(), StringComparison.OrdinalIgnoreCase))
-                    return;
+                if (!string.IsNullOrEmpty(p.Trim()) && !string.Equals(p.Trim(), dir.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    cleanParts.Add(p.Trim());
+                }
             }
-            string newPath = currentPath.TrimEnd(';') + ";" + dir;
+            string newPath = dir + (cleanParts.Count > 0 ? ";" + string.Join(";", cleanParts.ToArray()) : "");
             Environment.SetEnvironmentVariable("Path", newPath, EnvironmentVariableTarget.User);
-            Console.WriteLine("Added to User PATH.");
+            Console.WriteLine("Added to User PATH (high priority).");
         }
 
         private static void RemoveFromUserPath(string dir)
@@ -788,29 +874,22 @@ del ""%~f0""
 .SYNOPSIS
     Sends desktop notification via LetMeKnow.
 .SYNTAX
-    lmk [-Who] <string> [[-What] <string>] [[-Details] <string>]
+    lmk <agent-name> <message> [<details>]
+    lmk --urgent <agent-name> <message>
 #>
 function lmk {{
     [CmdletBinding()]
     [Alias(""letmeknow"")]
     param(
-        [Parameter(Position = 0, Mandatory = $true)]
-        [string]$Who,
-
-        [Parameter(Position = 1, Mandatory = $false)]
-        [string]$What = """",
-
-        [Parameter(Position = 2, Mandatory = $false)]
-        [string]$Details = """"
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Args
     )
 
     $exe = '{0}'
-    if ($Details) {{
-        & $exe $Who $What $Details
-    }} elseif ($What) {{
-        & $exe $Who $What
+    if ($Args) {{
+        & $exe @Args
     }} else {{
-        & $exe $Who
+        & $exe
     }}
 }}
 
