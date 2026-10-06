@@ -5,19 +5,7 @@ A lightweight desktop notification tool for Windows designed for agentic coding 
 It fires native Windows notifications and a floating on-screen card so you get alerted when an agent needs input, credentials, or review.
 
 
-
-
-## Options
-
-```text
-Usage:
-  lmk <who> <what> [<details>]    Send notification
-  lmk --urgent <who> <what>       Send high-priority notification
-  lmk --config                    Open configuration wizard
-  lmk --test                      Send test notification
-  lmk --install                   Install globally (PATH & PowerShell cmdlet)
-  lmk --uninstall                 Remove application and settings
-```
+**If you are using MCP protocol, we highly recommend option **6** as it will auto install, other options are for if your agent cant automatically install it itself. Will likely be changed in a future update.**
 
 ## Installation
 
