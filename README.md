@@ -27,7 +27,8 @@ Usage:
    *(If this dosen't work please run install.bat as a secondary measure)*
 3. Paste the **PROMPT.md** file into your AI agent and it should install automatically. 
    *(If your agent dosent install it properly refer to the Agent Setup guide)*
-4. If when your AI tries to run it and it runs into a error with running scripts, it should do the fallback automatically, but it likely to do with your permissions. Cited on Codex.
+4. ~~If when your AI tries to run it and it runs into a error with running scripts, it should do the fallback automatically, but it likely to do with your permissions. Cited on Codex.~~
+  *(Use new MCP connection instead, more instructions listed in the setup)*
 
 This does the following:
 - Copies `lmk.exe` to `%LOCALAPPDATA%\LetMeKnow`.
