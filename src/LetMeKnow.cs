@@ -734,7 +734,7 @@ try {{
             Console.WriteLine("    [6] Copy Universal Agent Prompt to clipboard (for any AI agent)");
             Console.WriteLine("    [7] Skip agent configuration");
             Console.WriteLine();
-            int agentChoice = PromptChoice("Select an option [1-7] (default 1): ", 1, 1, 7);
+            int agentChoice = PromptChoice("Select an option [1-7] (default 6): ", 1, 6, 7);
             if (agentChoice == 1)
             {
                 AgentInstaller.InstallAll(Directory.GetCurrentDirectory());
