@@ -180,6 +180,18 @@ namespace LetMeKnow
                 return;
             }
 
+            if (first == "--mcp-prompt" || first == "mcp-prompt")
+            {
+                McpServer.PrintAndCopyMcpPrompt();
+                return;
+            }
+
+            if (first == "--mcp-connect" || first == "mcp-connect" || first == "--mcp-install")
+            {
+                McpServer.AutoConnectAll(Directory.GetCurrentDirectory());
+                return;
+            }
+
             if (first == "--prompt" || first == "prompt" || first == "-p" || first == "--universal-prompt")
             {
                 AgentInstaller.PrintUniversalPrompt();
@@ -605,7 +617,9 @@ try {{
             Console.WriteLine("  lmk <who> <what> [<details>]    Send notification");
             Console.WriteLine("  lmk --urgent <who> <what>       Send high-priority notification");
             Console.WriteLine("  lmk --mcp                       Run Model Context Protocol (MCP) server");
-            Console.WriteLine("  lmk --mcp-config                Show MCP configuration for coding agents");
+            Console.WriteLine("  lmk --mcp-prompt                Display & copy AI prompt to auto-connect MCP");
+            Console.WriteLine("  lmk --mcp-connect               Auto-connect MCP to detected coding agents");
+            Console.WriteLine("  lmk --mcp-config                Show raw MCP configuration snippets");
             Console.WriteLine("  lmk --mcp-toggle                Toggle MCP integration on / off");
             Console.WriteLine("  lmk --install-agents [name]     Directly configure agents (all/claude/cursor/codex)");
             Console.WriteLine("  lmk --prompt                    Display & copy universal AI agent prompt");

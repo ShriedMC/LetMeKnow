@@ -12,6 +12,7 @@ namespace LetMeKnow
     {
         public static string GetUniversalPrompt()
         {
+            string exePath = Assembly.GetExecutingAssembly().Location;
             return @"I have installed LetMeKnow (`lmk`), a desktop notification utility and MCP server on this machine.
 
 Your task right now is to configure yourself to use `lmk` whenever you need human input or get stuck.
@@ -34,9 +35,14 @@ Follow these steps immediately:
    If you have MCP tool access:
    - Call tool `notify_human` or `ask_human` with your name and message.
    ```
-4. Verify your setup right now by executing this command in your terminal:
+4. If your environment supports MCP (Model Context Protocol):
+   Connect to the local LetMeKnow MCP server on this machine:
+   - Command: """ + exePath + @"""
+   - Args: [""--mcp""]
+   (For Cursor: add to `.cursor/mcp.json`; For Claude Code CLI: `claude mcp add letmeknow """ + exePath + @""" -- --mcp`; For Windsurf: `~/.codeium/windsurf/mcp_config.json`).
+5. Verify your setup right now by executing this command in your terminal:
    lmk ""<YourAgentName>"" ""Desktop alerts configured successfully""
-5. Confirm to me once saved and verified.";
+6. Confirm to me once saved and verified.";
         }
 
         public static void PrintUniversalPrompt()
@@ -239,7 +245,7 @@ When you need user input, credentials, clarification, or human review:
             }
         }
 
-        private static void TryInjectMcpConfig(string jsonPath, string exePath, string displayName)
+        internal static void TryInjectMcpConfig(string jsonPath, string exePath, string displayName)
         {
             try
             {
@@ -684,11 +690,117 @@ When you need user input, credentials, clarification, or human review:
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("  Commands:");
             Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine("    lmk --mcp-connect           Auto-connect MCP to detected coding agents");
+            Console.WriteLine("    lmk --mcp-prompt            Display & copy AI prompt to auto-connect MCP");
             Console.WriteLine("    lmk --install-agents all    Directly configure all agents in this folder");
             Console.WriteLine("    lmk --prompt                Display & copy universal AI agent prompt");
             Console.WriteLine("    lmk --mcp                   Start the stdio MCP server directly");
             Console.WriteLine("    lmk --mcp-toggle            Toggle MCP enabled / disabled");
             Console.WriteLine("    lmk --config                Run interactive wizard to update preferences");
+            Console.ResetColor();
+            Console.WriteLine();
+        }
+
+        public static string GetMcpPrompt()
+        {
+            string exePath = Assembly.GetExecutingAssembly().Location;
+            return @"Please connect to the LetMeKnow MCP desktop alert tool on this computer:
+- Server Name: letmeknow
+- Command: """ + exePath + @"""
+- Args: [""--mcp""]
+
+Tools Provided:
+- `notify_human`: Send desktop alert cards and audio chimes to the user when you need input, credentials, review, or are blocked.
+- `ask_human`: Solicit input or decision from the user.
+
+Instructions for AI Agent:
+1. If you are Cursor, add this server into `.cursor/mcp.json`.
+2. If you are Claude Code, run: claude mcp add letmeknow """ + exePath + @""" -- --mcp
+3. If you are Windsurf, add this server into ~/.codeium/windsurf/mcp_config.json.
+4. If you support MCP in another tool, register the command and args above.
+5. Once added, test the tool by calling `notify_human` with a confirmation message.";
+        }
+
+        public static void PrintAndCopyMcpPrompt()
+        {
+            string prompt = GetMcpPrompt();
+
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("  +--------------------------------------------------------+");
+            Console.WriteLine("  |  AI Agent Auto-Connect Prompt (MCP)                    |");
+            Console.WriteLine("  +--------------------------------------------------------+");
+            Console.ResetColor();
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("  Paste this prompt directly into your AI assistant chat:");
+            Console.WriteLine("  --------------------------------------------------------");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(prompt);
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("  --------------------------------------------------------");
+            Console.ResetColor();
+
+            try
+            {
+                Clipboard.SetText(prompt);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("  [OK] Copied to clipboard! Just paste it into your AI agent.");
+                Console.ResetColor();
+            }
+            catch { }
+            Console.WriteLine();
+        }
+
+        public static void AutoConnectAll(string targetDir)
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("  Auto-Connecting MCP to AI Coding Assistants...");
+            Console.ResetColor();
+
+            string exePath = Assembly.GetExecutingAssembly().Location;
+
+            // 1. Cursor (.cursor/mcp.json)
+            try
+            {
+                string cursorMcp = Path.Combine(targetDir, ".cursor", "mcp.json");
+                AgentInstaller.TryInjectMcpConfig(cursorMcp, exePath, "Cursor (.cursor/mcp.json)");
+            }
+            catch { }
+
+            // 2. Windsurf (~/.codeium/windsurf/mcp_config.json)
+            try
+            {
+                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                string windsurfMcp = Path.Combine(userProfile, ".codeium", "windsurf", "mcp_config.json");
+                AgentInstaller.TryInjectMcpConfig(windsurfMcp, exePath, "Windsurf (~/.codeium/windsurf/mcp_config.json)");
+            }
+            catch { }
+
+            // 3. Claude Desktop (%APPDATA%\Claude\claude_desktop_config.json)
+            try
+            {
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string claudeDesktopDir = Path.Combine(appData, "Claude");
+                if (Directory.Exists(claudeDesktopDir))
+                {
+                    string claudeDesktopMcp = Path.Combine(claudeDesktopDir, "claude_desktop_config.json");
+                    AgentInstaller.TryInjectMcpConfig(claudeDesktopMcp, exePath, "Claude Desktop");
+                }
+            }
+            catch { }
+
+            // 4. Claude Code CLI helper
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("  * For Claude Code terminal CLI, run:");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("    claude mcp add letmeknow \"" + exePath + "\" -- --mcp");
+            Console.ResetColor();
+
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("  [OK] Auto-connect completed! No manual JSON configuration needed.");
             Console.ResetColor();
             Console.WriteLine();
         }

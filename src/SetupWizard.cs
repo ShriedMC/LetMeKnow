@@ -24,7 +24,7 @@ namespace LetMeKnow
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("  Select an option:");
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("    [1] Quick Setup (Recommended - 1 Click)  <-- Press Enter");
+                Console.WriteLine("    [1] Quick Install + Setup (Recommended - 1 Click)  <-- Press Enter");
                 Console.ForegroundColor = ConsoleColor.DarkGray;
                 Console.WriteLine("        * Installs lmk globally to User PATH & PowerShell");
                 Console.WriteLine("        * Enables chime & floating card on your active monitor");
@@ -43,9 +43,9 @@ namespace LetMeKnow
                 Console.WriteLine("        * Fine-tune audio, display duration, and monitor behavior");
                 Console.WriteLine();
                 Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine("    [4] Model Context Protocol (MCP) Setup");
+                Console.WriteLine("    [4] Connect AI Tools (MCP Setup)");
                 Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.WriteLine("        * View & export config snippets for Cursor, Claude Code, etc.");
+                Console.WriteLine("        * 1-click tool connect or copy prompt for AI auto-setup");
                 Console.WriteLine();
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("    [5] Send Test Notification");
@@ -70,7 +70,7 @@ namespace LetMeKnow
                 }
                 else if (choice == 4)
                 {
-                    McpServer.PrintMcpConfig();
+                    RunMcpMenu(cfg);
                 }
                 else if (choice == 5)
                 {
@@ -132,11 +132,11 @@ namespace LetMeKnow
             Console.ResetColor();
             Console.WriteLine();
 
-            PrintStepHeader("2/4", "Global Installation");
+            PrintStepHeader("2/4", "Global Installation (PATH & PowerShell)");
             Installer.Install(cfg);
             Console.WriteLine();
 
-            PrintStepHeader("3/4", "Configuring AI Coding Agents");
+            PrintStepHeader("3/4", "Configuring AI Coding Agents & MCP Tools");
             AgentInstaller.InstallAll(Directory.GetCurrentDirectory());
             AgentInstaller.CopyUniversalPromptToClipboard();
             Console.WriteLine();
@@ -155,14 +155,14 @@ namespace LetMeKnow
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("  +--------------------------------------------------------+");
-            Console.WriteLine("  |  All Done! How to use LetMeKnow:                       |");
+            Console.WriteLine("  |  All Done! Quick Install + Setup Complete:             |");
             Console.WriteLine("  +--------------------------------------------------------+");
             Console.ResetColor();
             Console.WriteLine();
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine("  1. Give your AI coding agent the instructions:");
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("     * We just copied the universal prompt to your clipboard!");
+            Console.WriteLine("     * We just copied the setup prompt to your clipboard!");
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine("     * Simply switch to Cursor, Claude, Codex, etc., press Ctrl+V, and hit Enter.");
             Console.WriteLine();
@@ -181,8 +181,9 @@ namespace LetMeKnow
             Console.WriteLine("  3. Helpful commands:");
             Console.ForegroundColor = ConsoleColor.Gray;
             Console.WriteLine("     * lmk --prompt        Display & re-copy universal prompt anytime");
+            Console.WriteLine("     * lmk --mcp-prompt    Display & copy MCP auto-connect prompt");
+            Console.WriteLine("     * lmk --mcp-connect   Auto-connect MCP to detected coding agents");
             Console.WriteLine("     * lmk --history       View recent notification history");
-            Console.WriteLine("     * lmk --mcp-config    View MCP tool settings for your editor");
             Console.WriteLine("     * lmk --config        Return to this setup menu anytime");
             Console.ResetColor();
             Console.WriteLine();
@@ -217,6 +218,72 @@ namespace LetMeKnow
             else if (choice == 4) AgentInstaller.InstallCodex(curDir);
             else if (choice == 5) AgentInstaller.InstallWindsurf(curDir);
             else if (choice == 6) AgentInstaller.PrintUniversalPrompt();
+        }
+
+        private static void RunMcpMenu(Config cfg)
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("  +--------------------------------------------------------+");
+            Console.WriteLine("  |  Connect AI Tools (MCP Setup)                          |");
+            Console.WriteLine("  +--------------------------------------------------------+");
+            Console.ResetColor();
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine("  MCP connects LetMeKnow directly into AI coding assistants as a tool.");
+            Console.WriteLine("  This lets your AI alert you without running command-line scripts.");
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write("  MCP Server Status: ");
+            if (cfg.McpEnabled)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("ENABLED");
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("DISABLED");
+            }
+            Console.ResetColor();
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("    [1] Auto-Connect All AI Agents (1-Click)");
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("        * Configures Cursor, Windsurf, Claude in this workspace");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("    [2] Copy AI Prompt for Auto-Setup (Recommended)");
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("        * Copies a prompt so your AI agent configures MCP itself");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("    [3] Toggle MCP Server On / Off");
+            Console.WriteLine("    [4] Advanced: View Raw JSON Configuration Snippets");
+            Console.WriteLine("    [0] Back to Main Menu");
+            Console.ResetColor();
+            Console.WriteLine();
+
+            int choice = PromptChoice("Select [0-4] (default 1): ", 1, 0, 4);
+
+            if (choice == 1)
+            {
+                McpServer.AutoConnectAll(Directory.GetCurrentDirectory());
+            }
+            else if (choice == 2)
+            {
+                McpServer.PrintAndCopyMcpPrompt();
+            }
+            else if (choice == 3)
+            {
+                cfg.McpEnabled = !cfg.McpEnabled;
+                cfg.Save();
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("  [OK] MCP Server is now " + (cfg.McpEnabled ? "ENABLED." : "DISABLED."));
+                Console.ResetColor();
+            }
+            else if (choice == 4)
+            {
+                McpServer.PrintMcpConfig();
+            }
         }
 
         private static void RunCustomSettings(Config cfg)
